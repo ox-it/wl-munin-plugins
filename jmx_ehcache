@@ -119,7 +119,7 @@ sub config() {
         printf "multigraph %s\n", sanitize_field($bean); 
         print "graph_title EhCache $bean\n";
         print "graph_vlabel percentage\n";
-        print "graph_info The utilisation and hit ratio of the cache.";
+        print "graph_info The utilisation and hit ratio of the cache.\n";
         print "graph_category ehcache\n";
         print "memory_usage.type GAUGE\n";
         print "memory_usage.min 0\n";
