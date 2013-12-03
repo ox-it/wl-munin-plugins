@@ -3,17 +3,17 @@
 
 =head1 NAME
 
-jmx_tomcat_dbpools - Plugin to monitor the database connection pools of a Tomcat application server via JMX
+jmx_ehcache - Plugin to monitor the ehcaches it finds
 
 =head1 APPLICABLE SYSTEMS
 
-Tested with Tomcat 5.5/6.0 on Sun JVM 6. Please use this plugin as a template for other application-server specific monitoring.
+Any application that has ehcache in it and is monitorable through JMX
 
 Any JVM that supports JMX should in theory do.
 
 =head1 CONFIGURATION
 
-  [jmx_tomcat_dbpools*]
+  [jmx_ehcache]
     env.ip 127.0.0.1
     env.port 5400
     env.username monitorRole
@@ -71,7 +71,8 @@ GPLv2
 
 use strict;
 
-my $beans="Catalina:type=DataSource,class=javax.sql.DataSource,name=*";
+my $beans="net.sf.ehcache:type=Cache???*,CacheManager=*,name=*";
+my @properties=qw{MaxElementsInMemory MemoryStoreObjectCount CacheHits CacheMisses};
 my $munin_jar='/usr/share/munin/munin-jmx-plugins.jar';
 my $java='/usr/bin/java';
 my $ip=$ENV{'ip'} || "127.0.0.1";
@@ -81,52 +82,75 @@ if($ENV{'JRE_HOME'}) {
     $java="$ENV{'JRE_HOME'}/bin/java";
 }
 
-sub config() {
-    open(CMD, "-|", $java, "-cp", $munin_jar, "org.munin.plugin.jmx.Beans", $beans, "maxActive") or die "Error: could not run \"$java -cp $munin_jar org.munin.plugin.jmx.Beans maxActive\": $!";
+# Prefix with a known good char, as field names can't start with a number
+sub sanitize_field {
+    my ($field) = @_;
+    # Get rid novalid characters
+    $field =~ s/[^A-Za-z0-9]/_/g;
+    # Make sure we don't start with a number by prepending 'v' if we do
+    $field =~ s/^[0-9]/v$&/;
+    return $field;
+}
 
-    print "graph_title Tomcat database pool overview\n";
-    print "graph_vlabel current connections\n";
-    print "graph_info Shows the number of connections used for every pool in a Tomcat instance\n";
-    print "graph_category tomcat\n";
 
+sub loadData() {    
+    open(CMD, "-|", $java, "-cp", $munin_jar, "org.munin.plugin.jmx.Beans", $beans, @properties) or die "Error: could not run \"$java -cp $munin_jar org.munin.plugin.jmx.Beans $beans\": $!";
+    my %beans = ();
     while(my $line = <CMD>) {
         chomp($line);
-        if($line =~ /^[^\t]+,name="([^\t"]+)"\t([^\t]+)\t([^\t]+)$/) {
-            my $max   = $3;
-            my $label = $1;
-            my $field = "v" . $label; # Prefix with a known good char, as field names can't start with a number
-            $field =~ s/[^A-Za-z0-9]/_/g;
-            print "$field.label $label\n$field.max $max\n";
-            if(defined $ENV{'critical'}) {
-                print "$field.critical " . ($max * $ENV{'critical'} / 100), "\n";
-            }
-            if(defined $ENV{'warning'}) {
-                print "$field.warning " . ($max * $ENV{'warning'} / 100), "\n";
+        if(my ($bean, $property, $value) = $line =~ /^(.+)\t(.+)\t(.+)$/) {
+            if (my ($cache) = $bean =~ /name=(.+)$/) {
+              my ($beandata) = $beans{$cache};
+              if (!$beandata) {
+                $beandata = {};
+                $beans{$cache} = $beandata;
+              }
+              $beandata->{$property} = $value;
             }
         }
     }
     close(CMD);
+    return %beans;
+}
+
+sub config() {
+    my %beans = loadData();
+    foreach my $bean (keys %beans) {
+        printf "multigraph %s\n", sanitize_field($bean); 
+        print "graph_title EhCache $bean\n";
+        print "graph_vlabel percentage\n";
+        print "graph_info The utilisation and hit ratio of the cache.";
+        print "graph_category ehcache\n";
+        print "memory_usage.type GAUGE\n";
+        print "memory_usage.min 0\n";
+        print "memory_usage.max 100\n";
+        print "memory_usage.info The percentage of the cache entries that are used.\n";
+        print "memory_usage.label Used\n";
+        print "hit_ratio.type GAUGE\n";
+        print "hit_ratio.min 0\n";
+        print "hit_ratio.max 100\n";
+        print "hit_ration.info The percentage of cache lookups that results in a hit.\n";
+        print "hit_ration.label Hit ratio\n";
+        print "\n";
+    }
 }
 
 sub fetch() {
-
-    # Fetch bean values (through jmx) via the command line. We basically run the class "org.munin.plugin.jmx.Beans"
-    # with the parameters <bean> and <filter>, the <bean> being a bean pattern to fetch (in this case 
-    # "Catalina:type=DataSource,class=javax.sql.DataSource,name=*", and <filter> being "numActive" (the single field
-    # we're actually interested in). We can fetch multiple fields by listing them all as parameters, or list all fields
-    # by not supplying a filter (only a bean).
-    open(CMD, "-|", $java, "-cp", $munin_jar, "org.munin.plugin.jmx.Beans", $beans, "numActive") or die "Error: could not run \"$java -cp $munin_jar org.munin.plugin.jmx.Beans maxActive\": $!";
-
-    while(my $line = <CMD>) {
-        chomp($line);
-        if($line =~ /^[^\t]+,name="([^\t"]+)"\t([^\t]+)\t([^\t]+)$/) {
-            my $num   = $3;
-            my $field = "v" . $1; # Prefix with a known good char, as field names can't start with a number
-            $field =~ s/[^A-Za-z0-9]/_/g;
-            print "$field.value $num\n";
+    my %beans = loadData();
+    foreach my $bean (keys %beans) {
+        printf "multigraph %s\n", sanitize_field($bean); 
+        my $mem_max = int($beans{$bean}->{"MaxElementsInMemory"});
+        my $mem_num = int($beans{$bean}->{"MemoryStoreObjectCount"});
+        # Don't want divide by zero
+        if ($mem_max) {
+          printf("memory_usage.value %.2f\n", ( $mem_num / $mem_max ) *100);
+        }
+        my $hit = int($beans{$bean}->{"CacheHits"});
+        my $miss = int($beans{$bean}->{"CacheMisses"});
+        if ($hit || $miss) {
+          printf("hit_ratio.value %.2f\n", ($hit / ($hit + $miss) ) * 100)
         }
     }
-    close(CMD);
 }
 
 $ENV{'ip'} = $ip;
@@ -139,3 +163,4 @@ if(defined $ARGV[0] and $ARGV[0] eq "config") {
 }
 
 # vim: ts=4:ai:et:syntax=perl
+
