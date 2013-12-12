@@ -92,7 +92,7 @@ sub loadData() {
 sub config() {
     print "graph_title Active Sakai Sessions\n";
     print "graph_vlabel sessions\n";
-    print "graph_info Number of active Sakai sessions.|n";
+    print "graph_info Number of active Sakai sessions.\n";
     print "graph_category sakai\n";
     print "active_5min.type GAUGE\n";
     print "active_5min.min 0\n";
