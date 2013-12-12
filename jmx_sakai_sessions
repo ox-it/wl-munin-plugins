@@ -86,7 +86,7 @@ sub loadData() {
         }
     }
     close(CMD);
-    return %beans;
+    return %data;
 }
 
 sub config() {
