@@ -129,8 +129,8 @@ sub config() {
         print "hit_ratio.type GAUGE\n";
         print "hit_ratio.min 0\n";
         print "hit_ratio.max 100\n";
-        print "hit_ration.info The percentage of cache lookups that results in a hit.\n";
-        print "hit_ration.label Hit ratio\n";
+        print "hit_ratio.info The percentage of cache lookups that results in a hit.\n";
+        print "hit_ratio.label Hit ratio\n";
         print "\n";
     }
 }
