@@ -90,7 +90,7 @@ sub loadData() {
 }
 
 sub config() {
-    print "graph_title Active Sakai Sessions\n";
+    print "graph_title Active Sakai Sessions (port $port)\n";
     print "graph_vlabel sessions\n";
     print "graph_info Number of active Sakai sessions.\n";
     print "graph_category sakai\n";
