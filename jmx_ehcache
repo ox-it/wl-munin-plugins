@@ -116,7 +116,8 @@ sub loadData() {
 sub config() {
     my %beans = loadData();
     foreach my $bean (keys %beans) {
-        printf "multigraph %s\n", sanitize_field($bean); 
+        # As we run multiple JVMs the graph needs to include the port
+        printf "multigraph %s\n", sanitize_field($bean. "-". $port); 
         print "graph_title EhCache (port $port) $bean\n";
         print "graph_vlabel percentage\n";
         print "graph_info The utilisation and hit ratio of the cache.\n";
