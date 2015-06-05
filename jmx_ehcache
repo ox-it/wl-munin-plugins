@@ -139,7 +139,8 @@ sub config() {
 sub fetch() {
     my %beans = loadData();
     foreach my $bean (keys %beans) {
-        printf "multigraph %s\n", sanitize_field($bean); 
+        # As we run multiple JVMs the graph needs to include the port
+        printf "multigraph %s\n", sanitize_field($bean. "-". $port); 
         my $mem_max = int($beans{$bean}->{"MaxElementsInMemory"});
         my $mem_num = int($beans{$bean}->{"MemoryStoreObjectCount"});
         # Don't want divide by zero
